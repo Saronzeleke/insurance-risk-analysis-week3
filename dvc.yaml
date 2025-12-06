@@ -1,3 +1,4 @@
+
 stages:
   load_data:
     cmd: python scripts/load_and_preprocess.py
@@ -33,6 +34,6 @@ metrics:
   - reports/metrics.json
   
 plots:
-  reports/plots:
-    - reports/figures/*.png
-    - reports/figures/*.html
+  - reports/plots:
+      - reports/figures/*.png
+      - reports/figures/*.html
