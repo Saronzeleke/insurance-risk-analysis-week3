@@ -26,12 +26,21 @@ stages:
       - reports/figures/
       - reports/docs/eda_summary.json
     outs:
-      - reports/final_report.txt
+      - reports/final_report.pdf
       - reports/summary_insights.md
 
 metrics:
   - reports/metrics.json
 
+# FIXED: Correct plots syntax
 plots:
-  - reports/metrics.json
-  - reports/figures/*.png
+  - reports/metrics.json:
+      x: analysis_timestamp
+      y: overall_loss_ratio
+  - reports/figures/data_quality_summary.png
+  - reports/figures/correlation_matrix.png
+  - reports/figures/numeric_distributions.png
+  - reports/figures/categorical_distributions.png
+  - reports/figures/loss_ratio_analysis.png
+  - reports/figures/temporal_trends.png
+  - reports/figures/outlier_analysis.png
