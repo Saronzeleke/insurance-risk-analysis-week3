@@ -267,9 +267,9 @@ metrics:
   - reports/metrics.json
   
 plots:
-  - reports/plots:
-      - reports/figures/*.png
-      - reports/figures/*.html
+  reports/plots:
+    - reports/figures/*.png
+    - reports/figures/*.html
 """
         
         dvc_yaml_path = self.project_root / "dvc.yaml"
