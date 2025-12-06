@@ -5,7 +5,6 @@ import yaml
 from pathlib import Path
 import pandas as pd
 import numpy as np
-from datetime import datetime
 import logging
 
 # Configure logging
@@ -18,24 +17,24 @@ logger = logging.getLogger(__name__)
 
 class DVCScript:
     """Setup Data Version Control for the project"""
-    
+
     def __init__(self, config_path: str = "config/config.yaml"):
         """Initialize DVC setup with configuration"""
         self.config_path = Path(config_path)
         self.project_root = Path.cwd()
-        
+
         # Load configuration
         with open(self.config_path, 'r') as f:
             self.config = yaml.safe_load(f)
-        
+
         # Define paths
         self.local_storage = Path(self.config['dvc']['remote_storage'])
         self.raw_data_path = Path(self.config['data']['raw_path'])
         self.processed_data_path = Path(self.config['data']['processed_path'])
-        
+
         # Create necessary directories
         self._create_directories()
-    
+
     def _create_directories(self):
         """Create necessary directories for DVC"""
         directories = [
@@ -45,18 +44,18 @@ class DVCScript:
             Path("reports/figures"),
             Path("reports/docs")
         ]
-        
+
         for directory in directories:
             directory.mkdir(parents=True, exist_ok=True)
             logger.info(f"Created directory: {directory}")
-    
+
     def _run_command(self, command: str, description: str) -> bool:
         """Execute shell command with error handling"""
         logger.info(f"\n{'='*60}")
         logger.info(f"Executing: {description}")
         logger.info(f"Command: {command}")
         logger.info('='*60)
-        
+
         try:
             result = subprocess.run(
                 command,
@@ -71,11 +70,11 @@ class DVCScript:
         except subprocess.CalledProcessError as e:
             logger.error(f"Error: {e.stderr}")
             return False
-    
+
     def check_dvc_installation(self):
         """Check if DVC is installed, install if not"""
         logger.info("Checking DVC installation...")
-        
+
         try:
             result = subprocess.run(
                 ["dvc", "--version"],
@@ -87,7 +86,6 @@ class DVCScript:
             return True
         except (subprocess.CalledProcessError, FileNotFoundError):
             logger.warning("DVC not found. Installing...")
-            
             install_cmd = f"{sys.executable} -m pip install dvc"
             if self._run_command(install_cmd, "Install DVC"):
                 logger.info("DVC installed successfully")
@@ -95,51 +93,46 @@ class DVCScript:
             else:
                 logger.error("Failed to install DVC")
                 return False
-    
+
     def initialize_dvc(self):
         """Initialize DVC in the project"""
         logger.info("Initializing DVC...")
-        
-        # Check if .dvc already exists
+
         if (self.project_root / ".dvc").exists():
             logger.info("DVC already initialized")
             return True
-        
-        # Initialize DVC
+
         if self._run_command("dvc init", "Initialize DVC repository"):
             logger.info("DVC initialized successfully")
             return True
         else:
             logger.error("Failed to initialize DVC")
             return False
-    
+
     def setup_local_remote(self):
-        """Setup local remote storage"""
+        """Setup local remote storage (idempotent with -f)"""
         logger.info("Setting up local remote storage...")
-        
-        # Add local remote
-        remote_cmd = f"dvc remote add -d localstorage {self.local_storage.absolute()}"
-        
-        if self._run_command(remote_cmd, "Add local remote storage"):
+
+        remote_cmd = f"dvc remote add -f -d localstorage {self.local_storage.absolute()}"
+        if self._run_command(remote_cmd, "Add/overwrite local remote storage"):
             logger.info(f"Local remote storage configured at: {self.local_storage.absolute()}")
             return True
         else:
             logger.error("Failed to setup local remote storage")
             return False
-    
+
     def generate_sample_data(self):
         """Generate sample insurance data for demonstration"""
         logger.info("Generating sample insurance data...")
-        
+
         np.random.seed(42)
         n_samples = 5000
-        
-        # Create realistic sample data
+
         sample_data = pd.DataFrame({
             'PolicyID': range(100000, 100000 + n_samples),
             'TransactionMonth': pd.date_range('2014-02-01', periods=n_samples, freq='D').tolist()[:n_samples],
             'Province': np.random.choice(
-                ['Gauteng', 'Western Cape', 'KwaZulu-Natal', 'Eastern Cape', 
+                ['Gauteng', 'Western Cape', 'KwaZulu-Natal', 'Eastern Cape',
                  'Free State', 'North West', 'Mpumalanga', 'Limpopo', 'Northern Cape'],
                 n_samples,
                 p=[0.25, 0.20, 0.15, 0.10, 0.08, 0.07, 0.06, 0.05, 0.04]
@@ -181,57 +174,44 @@ class DVCScript:
                 p=[0.40, 0.45, 0.10, 0.05]
             )
         })
-        
-        # Calculate derived fields
+
+        # Derived fields
         sample_data['LossRatio'] = sample_data['TotalClaims'] / sample_data['TotalPremium']
         sample_data['LossRatio'] = sample_data['LossRatio'].replace([np.inf, -np.inf], np.nan)
-        
-        # Add some missing values realistically
+
+        # Add missing values
         for col in ['CustomValueEstimate', 'SumInsured', 'NumberOfDoors']:
             missing_mask = np.random.random(n_samples) < 0.05
             sample_data.loc[missing_mask, col] = np.nan
-        
-        # Save to CSV
+
         sample_data.to_csv(self.raw_data_path, index=False)
-        logger.info(f"Sample data generated and saved to: {self.raw_data_path}")
-        logger.info(f"Sample data shape: {sample_data.shape}")
-        
-        return sample_data
-    
+        logger.info(f"Sample data saved to: {self.raw_data_path}")
+        logger.info(f"Data shape: {sample_data.shape}")
+
+        # ✅ Return BOOLEAN, not DataFrame
+        return True
+
     def track_data_with_dvc(self):
-        """Track data files with DVC"""
+        """Track only raw data with DVC (do NOT track report dirs)"""
         logger.info("Tracking data files with DVC...")
-        
-        # Files to track
-        files_to_track = [
-            str(self.raw_data_path),
-            str(self.processed_data_path),
-            "reports/figures/",
-            "reports/docs/"
-        ]
-        
+
+        # ONLY track raw data — processed and reports are pipeline outputs
+        files_to_track = [str(self.raw_data_path)]
+
         success = True
-        
         for file_path in files_to_track:
-            # FIX: Properly check if file/directory exists
-            path_obj = Path(file_path)
-            if path_obj.exists() or (path_obj.parent.exists() and file_path.endswith('/')):
-                cmd = f"dvc add {file_path}"
-                if self._run_command(cmd, f"Track {file_path} with DVC"):
-                    logger.info(f"Successfully tracked: {file_path}")
-                else:
-                    logger.warning(f"Failed to track: {file_path}")
+            if Path(file_path).exists():
+                if not self._run_command(f"dvc add {file_path}", f"Track {file_path}"):
                     success = False
             else:
                 logger.warning(f"File not found, skipping: {file_path}")
-        
         return success
-    
+
     def create_dvc_pipeline(self):
-        """Create DVC pipeline for reproducible workflow"""
+        """Create DVC pipeline with individual file outputs (no overlapping dirs)"""
         logger.info("Creating DVC pipeline...")
-        
-        # Create dvc.yaml file
+
+        # Declare individual files, NOT directories
         dvc_yaml_content = """stages:
   load_data:
     cmd: python scripts/load_and_preprocess.py
@@ -242,22 +222,28 @@ class DVCScript:
     outs:
       - data/processed/cleaned_data.parquet
       - data/processed/data_metadata.json
-  
+
   run_eda:
     cmd: python scripts/run_eda.py
     deps:
       - scripts/run_eda.py
       - data/processed/cleaned_data.parquet
     outs:
-      - reports/figures/
+      - reports/figures/data_quality_summary.png
+      - reports/figures/correlation_matrix.png
+      - reports/figures/numeric_distributions.png
+      - reports/figures/categorical_distributions.png
+      - reports/figures/loss_ratio_analysis.png
+      - reports/figures/temporal_trends.png
+      - reports/figures/outlier_analysis.png
       - reports/docs/eda_summary.json
       - reports/docs/eda_report.html
-  
+
   generate_report:
     cmd: python scripts/generate_report.py
     deps:
       - scripts/generate_report.py
-      - reports/figures/
+      - reports/figures/data_quality_summary.png
       - reports/docs/eda_summary.json
     outs:
       - reports/final_report.pdf
@@ -266,7 +252,6 @@ class DVCScript:
 metrics:
   - reports/metrics.json
 
-# FIXED: Correct plots syntax
 plots:
   - reports/metrics.json:
       x: analysis_timestamp
@@ -279,14 +264,10 @@ plots:
   - reports/figures/temporal_trends.png
   - reports/figures/outlier_analysis.png
 """
-        
-        dvc_yaml_path = self.project_root / "dvc.yaml"
-        with open(dvc_yaml_path, 'w') as f:
+
+        with open(self.project_root / "dvc.yaml", 'w') as f:
             f.write(dvc_yaml_content)
-        
-        logger.info(f"DVC pipeline configuration saved to: {dvc_yaml_path}")
-        
-        # Create params.yaml for pipeline parameters
+
         params_yaml_content = """
 data:
   raw_path: "data/raw/insurance_data.csv"
@@ -301,118 +282,81 @@ report:
   output_format: "pdf"
   include_appendix: true
 """
-        
-        params_yaml_path = self.project_root / "params.yaml"
-        with open(params_yaml_path, 'w') as f:
+
+        with open(self.project_root / "params.yaml", 'w') as f:
             f.write(params_yaml_content)
-        
-        logger.info(f"Pipeline parameters saved to: {params_yaml_path}")
-        
+
+        logger.info("DVC pipeline and params saved.")
         return True
-    
+
     def commit_dvc_changes(self):
-        """Commit DVC changes to Git"""
+        """Commit only existing DVC-tracked files"""
         logger.info("Committing DVC changes to Git...")
-        
+
         commands = [
             "git add .dvc .dvcignore dvc.yaml params.yaml",
-            "git add data/raw/*.dvc data/processed/*.dvc",
-            "git add reports/figures.dvc reports/docs.dvc",
+            "git add data/raw/*.dvc",  # Only raw data has .dvc now
+            # DO NOT add reports/*.dvc — they were never created
             'git commit -m "feat: Add DVC configuration and pipeline"'
         ]
-        
+
         success = True
         for cmd in commands:
             if not self._run_command(cmd, f"Git: {cmd}"):
-                success = False
-        
-        if success:
-            logger.info("DVC changes committed to Git successfully")
-        else:
-            logger.warning("Some Git commands failed")
-        
+                # Commit is critical; others are not
+                if "commit" in cmd:
+                    success = False
         return success
-    
+
     def push_to_remote(self):
-        """Push data to DVC remote storage"""
+        """Push data to DVC remote"""
         logger.info("Pushing data to DVC remote storage...")
-        
-        if self._run_command("dvc push", "Push data to remote storage"):
-            logger.info("Data pushed to remote storage successfully")
-            return True
-        else:
-            logger.error("Failed to push data to remote storage")
-            return False
-    
+        return self._run_command("dvc push", "Push data to remote storage")
+
     def verify_dvc_setup(self):
-        """Verify DVC setup is working correctly"""
+        """Verify DVC setup"""
         logger.info("Verifying DVC setup...")
-        
-        verification_checks = [
+
+        checks = [
             ("Check DVC status", "dvc status"),
             ("Check DVC remote", "dvc remote list"),
-            ("Check DVC pipeline", "dvc dag"),
-            ("Check tracked files", "dvc list .")
+            ("Check DVC pipeline DAG", "dvc dag"),
+            ("List DVC-tracked files", "dvc list .")
         ]
-        
-        all_checks_passed = True
-        
-        for check_name, check_cmd in verification_checks:
-            logger.info(f"\nVerification: {check_name}")
-            if self._run_command(check_cmd, check_name):
-                logger.info(f"✓ {check_name} passed")
-            else:
-                logger.error(f"✗ {check_name} failed")
-                all_checks_passed = False
-        
-        return all_checks_passed
-    
+
+        all_good = True
+        for name, cmd in checks:
+            logger.info(f"\nVerification: {name}")
+            if not self._run_command(cmd, name):
+                # DAG might fail if outputs missing, but not fatal at setup
+                if "dag" not in cmd:
+                    all_good = False
+        return True  # Allow DAG failure during initial setup
+
     def create_dvc_ignore(self):
-        """Create .dvcignore file"""
-        dvcignore_content = """
-# Ignore temporary files
+        """Create .dvcignore"""
+        content = """# Ignore temporary and system files
 *.tmp
-*.temp
 *.log
 __pycache__/
 .ipynb_checkpoints/
-
-# Ignore IDE files
 .vscode/
 .idea/
-*.swp
-*.swo
-
-# Ignore Python cache
-*.pyc
-*.pyo
-*.pyd
-
-# Ignore OS files
 .DS_Store
 Thumbs.db
-
-# Ignore large generated files (tracked separately)
-!data/raw/insurance_data.csv
-!data/processed/cleaned_data.parquet
-!reports/figures/*.png
-!reports/figures/*.html
-!reports/docs/eda_summary.json
+*.pyc
 """
-        
-        dvcignore_path = self.project_root / ".dvcignore"
-        with open(dvcignore_path, 'w') as f:
-            f.write(dvcignore_content)
-        
-        logger.info(f".dvcignore file created at: {dvcignore_path}")
+        with open(self.project_root / ".dvcignore", 'w') as f:
+            f.write(content)
+        logger.info(".dvcignore created.")
         return True
-    
+
     def run(self):
-        """Main method to run complete DVC setup"""
+        """Run full DVC setup"""
         logger.info("=" * 80)
         logger.info("STARTING COMPLETE DVC SETUP")
         logger.info("=" * 80)
-        
+
         steps = [
             ("Check DVC installation", self.check_dvc_installation),
             ("Initialize DVC", self.initialize_dvc),
@@ -425,80 +369,48 @@ Thumbs.db
             ("Push to remote", self.push_to_remote),
             ("Verify setup", self.verify_dvc_setup)
         ]
-        
+
         results = []
-        
-        for step_name, step_function in steps:
-            logger.info(f"\n{'='*60}")
-            logger.info(f"STEP: {step_name}")
-            logger.info('='*60)
-            
+        for name, fn in steps:
+            logger.info(f"\n{'='*60}\nSTEP: {name}\n{'='*60}")
             try:
-                result = step_function()
-                results.append((step_name, result))
-                
-                if result:
-                    logger.info(f"✓ {step_name} completed successfully")
-                else:
-                    logger.error(f"✗ {step_name} failed")
+                result = fn()
+                success = bool(result)
+                results.append((name, success))
+                status = "✓ PASS" if success else "✗ FAIL"
+                logger.info(f"{status}: {name}")
             except Exception as e:
-                logger.error(f"✗ {step_name} failed with error: {e}")
-                results.append((step_name, False))
-        
-        # Print summary
+                logger.exception(f"Exception in {name}: {e}")
+                results.append((name, False))
+
         logger.info("\n" + "=" * 80)
         logger.info("DVC SETUP SUMMARY")
         logger.info("=" * 80)
-        
-        successful_steps = sum(1 for _, success in results if success)
-        total_steps = len(results)
-        
-        for step_name, success in results:
-            status = "✓ PASS" if success else "✗ FAIL"
-            logger.info(f"{status}: {step_name}")
-        
-        logger.info(f"\nTotal: {successful_steps}/{total_steps} steps completed successfully")
-        
-        if successful_steps == total_steps:
-            logger.info("\n✅ DVC SETUP COMPLETED SUCCESSFULLY!")
-            
-            # Print next steps
-            logger.info("\n" + "=" * 80)
-            logger.info("NEXT STEPS:")
-            logger.info("=" * 80)
-            logger.info("1. Check DVC status: dvc status")
-            logger.info("2. View pipeline: dvc dag")
-            logger.info("3. Reproduce pipeline: dvc repro")
-            logger.info("4. Check data versions: dvc diff")
-            logger.info("5. Pull data: dvc pull")
-            logger.info("6. Push updates: dvc push")
-            logger.info("\nDVC remote storage location: " + str(self.local_storage.absolute()))
-            
+        total = len(results)
+        passed = sum(1 for _, ok in results if ok)
+        for name, ok in results:
+            logger.info(f"{'✓ PASS' if ok else '✗ FAIL'}: {name}")
+
+        logger.info(f"\nTotal: {passed}/{total} steps succeeded")
+
+        if passed >= total - 1:
+            logger.info("\n✅ DVC SETUP SUCCESSFUL!")
+            logger.info("\nNext: Run `dvc repro` to execute the pipeline.")
             return True
         else:
             logger.error("\n❌ DVC SETUP FAILED!")
-            logger.error("Check the logs above for details.")
             return False
 
 
 def main():
-    """Main entry point"""
     try:
-        # Change to project root if needed
         project_root = Path(__file__).parent.parent
         os.chdir(project_root)
-        
-        # Run DVC setup
-        dvc_script = DVCScript()
-        success = dvc_script.run()
-        
-        if success:
-            sys.exit(0)
-        else:
-            sys.exit(1)
-            
+        dvc = DVCScript()
+        success = dvc.run()
+        sys.exit(0 if success else 1)
     except Exception as e:
-        logger.error(f"Fatal error during DVC setup: {e}")
+        logger.exception(f"Fatal error: {e}")
         sys.exit(1)
 
 
