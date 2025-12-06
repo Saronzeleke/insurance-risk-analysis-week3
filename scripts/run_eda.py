@@ -1,9 +1,18 @@
+#!/usr/bin/env python3
+"""
+Comprehensive EDA Script for DVC Pipeline
+"""
 import sys
 import os
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-import pandas as pd
 import json
+import pandas as pd
+from pathlib import Path
+
+# Add project root to Python path
+script_dir = Path(__file__).parent
+project_root = script_dir.parent
+sys.path.insert(0, str(project_root))
+
 from src.utils.data_loader import InsuranceDataProcessor
 from src.analysis.eda_analyzer import EDAAnalyzer
 from src.visualization.eda_plots import EDAVisualizer
@@ -18,16 +27,19 @@ def run_comprehensive_eda():
     logger.info("Starting comprehensive EDA analysis...")
     
     try:
-        # Load processed data
-        processor = InsuranceDataProcessor()
-        processor.load_data()
+        # ✅ Pass config path relative to script location
+        config_path = script_dir.parent / "config" / "config.yaml"
+        processor = InsuranceDataProcessor(str(config_path))
+        
+        # Load and preprocess data
+        df = processor.load_data()
         df = processor.preprocess_data()
         
         logger.info(f"Data loaded for EDA. Shape: {df.shape}")
         
         # Initialize analyzer and visualizer
         analyzer = EDAAnalyzer(df)
-        visualizer = EDAVisualizer(df, save_dir="reports/figures")
+        visualizer = EDAVisualizer(df, save_dir=project_root / "reports" / "figures")
         
         # Run comprehensive analysis
         logger.info("Running descriptive statistics...")
@@ -76,7 +88,8 @@ def run_comprehensive_eda():
         summary_report = analyzer.generate_summary_report()
         
         # Save summary report
-        summary_path = "reports/docs/eda_summary.json"
+        summary_path = project_root / "reports" / "docs" / "eda_summary.json"
+        summary_path.parent.mkdir(parents=True, exist_ok=True)
         with open(summary_path, 'w') as f:
             json.dump(summary_report, f, indent=2, default=str)
         
@@ -92,24 +105,25 @@ def run_comprehensive_eda():
             'analysis_timestamp': str(pd.Timestamp.now())
         }
         
-        metrics_path = "reports/metrics.json"
+        metrics_path = project_root / "reports" / "metrics.json"
+        metrics_path.parent.mkdir(parents=True, exist_ok=True)
         with open(metrics_path, 'w') as f:
             json.dump(metrics, f, indent=2)
         
         logger.info(f"Metrics saved to: {metrics_path}")
         
         # Generate HTML report
-        generate_html_report(summary_report, metrics)
+        generate_html_report(summary_report, metrics, project_root)
         
         logger.info("✅ EDA analysis completed successfully!")
         return True
         
     except Exception as e:
-        logger.error(f"Error in EDA analysis: {e}")
+        logger.error(f"Error in EDA analysis: {e}", exc_info=True)
         return False
 
 
-def generate_html_report(summary_report, metrics):
+def generate_html_report(summary_report, metrics, project_root):
     """Generate HTML report from EDA results"""
     html_content = f"""
 <!DOCTYPE html>
@@ -198,7 +212,8 @@ def generate_html_report(summary_report, metrics):
 </html>
 """
     
-    report_path = "reports/docs/eda_report.html"
+    report_path = project_root / "reports" / "docs" / "eda_report.html"
+    report_path.parent.mkdir(parents=True, exist_ok=True)
     with open(report_path, 'w') as f:
         f.write(html_content)
     
@@ -206,6 +221,5 @@ def generate_html_report(summary_report, metrics):
 
 
 if __name__ == "__main__":
-    
     success = run_comprehensive_eda()
     sys.exit(0 if success else 1)
