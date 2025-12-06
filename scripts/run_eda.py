@@ -1,7 +1,3 @@
-#!/usr/bin/env python3
-"""
-EDA Execution Script for DVC Pipeline
-"""
 import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -210,6 +206,6 @@ def generate_html_report(summary_report, metrics):
 
 
 if __name__ == "__main__":
-    import pandas as pd
+    
     success = run_comprehensive_eda()
     sys.exit(0 if success else 1)
