@@ -198,7 +198,7 @@ class DVCScript:
         
         return sample_data
     
-    def track_data_with_dvc(self):
+       def track_data_with_dvc(self):
         """Track data files with DVC"""
         logger.info("Tracking data files with DVC...")
         
@@ -213,8 +213,9 @@ class DVCScript:
         success = True
         
         for file_path in files_to_track:
-            if file_path.endswith('/') or Path(file_path).exists():
-
+            # FIX: Properly check if file/directory exists
+            path_obj = Path(file_path)
+            if path_obj.exists() or (path_obj.parent.exists() and file_path.endswith('/')):
                 cmd = f"dvc add {file_path}"
                 if self._run_command(cmd, f"Track {file_path} with DVC"):
                     logger.info(f"Successfully tracked: {file_path}")
@@ -231,8 +232,7 @@ class DVCScript:
         logger.info("Creating DVC pipeline...")
         
         # Create dvc.yaml file
-        dvc_yaml_content = """
-stages:
+        dvc_yaml_content = """stages:
   load_data:
     cmd: python scripts/load_and_preprocess.py
     deps:
@@ -262,16 +262,22 @@ stages:
     outs:
       - reports/final_report.pdf
       - reports/summary_insights.md
-  
+
 metrics:
   - reports/metrics.json
-plots:
-  - path: reports/plots
-    template: default
-    files:
-      - reports/figures/*.png
-      - reports/figures/*.html
 
+# FIXED: Correct plots syntax
+plots:
+  - reports/metrics.json:
+      x: analysis_timestamp
+      y: overall_loss_ratio
+  - reports/figures/data_quality_summary.png
+  - reports/figures/correlation_matrix.png
+  - reports/figures/numeric_distributions.png
+  - reports/figures/categorical_distributions.png
+  - reports/figures/loss_ratio_analysis.png
+  - reports/figures/temporal_trends.png
+  - reports/figures/outlier_analysis.png
 """
         
         dvc_yaml_path = self.project_root / "dvc.yaml"
