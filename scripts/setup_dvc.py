@@ -198,7 +198,7 @@ class DVCScript:
         
         return sample_data
     
-       def track_data_with_dvc(self):
+    def track_data_with_dvc(self):
         """Track data files with DVC"""
         logger.info("Tracking data files with DVC...")
         
