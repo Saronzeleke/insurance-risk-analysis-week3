@@ -1,9 +1,9 @@
-# Configuration file for Insurance Risk Analysis
-
+# config/config.yaml
 data:
+  
   raw_path: "data/raw/insurance_data.csv"
   processed_path: "data/processed/cleaned_data.parquet"
-  
+
 analysis:
   date_column: "TransactionMonth"
   target_columns:
@@ -22,7 +22,7 @@ analysis:
     - "CustomValueEstimate"
     - "SumInsured"
     - "CalculatedPremiumPerTerm"
-    
+
 visualization:
   style: "seaborn-v0_8-darkgrid"
   palette: "husl"
@@ -31,10 +31,8 @@ visualization:
     medium: [12, 8]
     large: [14, 10]
   dpi: 300
-  
+
 dvc:
   remote_storage: "config/local_storage"
   tracked_files:
     - "data/raw/insurance_data.csv"
-    - "data/processed/cleaned_data.parquet"
-    - "reports/figures/"

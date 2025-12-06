@@ -6,8 +6,9 @@ import numpy as np
 from pathlib import Path
 import yaml
 import logging
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 import warnings
+
 warnings.filterwarnings('ignore')
 
 # Configure logging
@@ -21,17 +22,29 @@ logger = logging.getLogger(__name__)
 class InsuranceDataProcessor:
     """Process insurance data for EDA analysis"""
 
-    def __init__(self, config_path: str = "config/config.yaml"):
+    def __init__(self, config_path: str):
         """
         Initialize data processor with configuration
         
         Args:
-            config_path: Path to configuration file
+            config_path: Path to configuration file (e.g., "../config/config.yaml")
         """
-        with open(config_path, 'r') as f:
+        # Resolve the config path to an absolute path
+        self.config_path = Path(config_path).resolve()
+        
+        # Project root is the parent of the 'config' directory
+        if self.config_path.parent.name != "config":
+            raise ValueError(f"Config file must be inside a 'config' folder. Got: {self.config_path}")
+        self.project_root = self.config_path.parent.parent
+
+        # Load config with UTF-8
+        with open(self.config_path, 'r', encoding='utf-8') as f:
             self.config = yaml.safe_load(f)
 
-        self.data_path = Path(self.config['data']['raw_path'])
+        # Build ABSOLUTE path to raw data
+        raw_rel = self.config['data']['raw_path']
+        self.data_path = (self.project_root / raw_rel).resolve()
+
         self.df = None
         self.metadata = {}
 
@@ -42,18 +55,27 @@ class InsuranceDataProcessor:
         Returns:
             DataFrame: Loaded and validated data
         """
+        # Verify file exists before attempting to load
+        if not self.data_path.exists():
+            raise FileNotFoundError(
+                f"Data file not found at resolved path:\n{self.data_path}\n"
+                f"Current working directory: {Path.cwd()}\n"
+                f"Config used: {self.config_path}"
+            )
+
         logger.info(f"Loading data from {self.data_path}")
 
         try:
-            # Try different file formats
-            if self.data_path.suffix == '.csv':
+            suffix = self.data_path.suffix.lower().strip()
+
+            if suffix == '.csv':
                 self.df = pd.read_csv(self.data_path, low_memory=False)
-            elif self.data_path.suffix == '.parquet':
+            elif suffix == '.parquet':
                 self.df = pd.read_parquet(self.data_path)
-            elif self.data_path.suffix in ['.xlsx', '.xls']:
+            elif suffix in ('.xlsx', '.xls'):
                 self.df = pd.read_excel(self.data_path)
             else:
-                raise ValueError(f"Unsupported file format: {self.data_path.suffix}")
+                raise ValueError(f"Unsupported file format: {suffix}")
 
             logger.info(f"Data loaded successfully. Shape: {self.df.shape}")
 
@@ -64,7 +86,7 @@ class InsuranceDataProcessor:
             return self.df
 
         except Exception as e:
-            logger.error(f"Error loading data: {e}")
+            logger.error(f"Error loading data from {self.data_path}: {e}")
             raise
 
     def validate_data_structure(self) -> Dict:
@@ -121,12 +143,7 @@ class InsuranceDataProcessor:
         return validation_results
 
     def preprocess_data(self) -> pd.DataFrame:
-        """
-        Preprocess data for analysis
-        
-        Returns:
-            DataFrame: Preprocessed data
-        """
+        """Preprocess data for analysis"""
         logger.info("Starting data preprocessing")
 
         # Convert date columns
@@ -151,7 +168,6 @@ class InsuranceDataProcessor:
         self._remove_extreme_outliers()
 
         logger.info(f"Data preprocessing completed. Final shape: {self.df.shape}")
-
         return self.df
 
     def _calculate_derived_metrics(self):
@@ -179,7 +195,6 @@ class InsuranceDataProcessor:
 
     def _handle_missing_values(self):
         """Handle missing values based on column type"""
-        # For numerical columns, fill with median
         numerical_cols = self.config['analysis']['numerical_columns']
         for col in numerical_cols:
             if col in self.df.columns and self.df[col].isnull().any():
@@ -187,74 +202,51 @@ class InsuranceDataProcessor:
                 self.df[col] = self.df[col].fillna(median_val)
                 logger.info(f"Filled missing values in {col} with median: {median_val}")
 
-        # For categorical columns, fill with mode
         categorical_cols = self.config['analysis']['categorical_columns']
         for col in categorical_cols:
             if col in self.df.columns and self.df[col].isnull().any():
-                if not self.df[col].mode().empty:
-                    mode_val = self.df[col].mode()[0]
-                else:
-                    mode_val = 'Unknown'
+                mode_val = self.df[col].mode()[0] if not self.df[col].mode().empty else 'Unknown'
                 self.df[col] = self.df[col].fillna(mode_val)
                 logger.info(f"Filled missing values in {col} with mode: {mode_val}")
 
     def _clean_categorical_variables(self):
         """Clean and standardize categorical variables"""
         categorical_cols = self.config['analysis']['categorical_columns']
-
         for col in categorical_cols:
             if col in self.df.columns:
-                # Convert to string and strip whitespace
-                self.df[col] = self.df[col].astype(str).str.strip()
-
-                # Standardize case
-                self.df[col] = self.df[col].str.title()
-
-                # Replace empty strings with 'Unknown'
-                self.df[col] = self.df[col].replace(['', 'Nan', 'None', 'N/A'], 'Unknown')
+                self.df[col] = (
+                    self.df[col]
+                    .astype(str)
+                    .str.strip()
+                    .str.title()
+                    .replace(['', 'Nan', 'None', 'N/A', 'nan', 'NULL'], 'Unknown')
+                )
 
     def _remove_extreme_outliers(self):
-        """Remove extreme outliers using IQR method"""
+        """Remove extreme outliers using 1st/99th percentiles"""
         numerical_cols = self.config['analysis']['numerical_columns']
-
         initial_rows = len(self.df)
 
         for col in numerical_cols:
             if col in self.df.columns:
-                Q1 = self.df[col].quantile(0.01)  # Using 1st percentile
-                Q3 = self.df[col].quantile(0.99)  # Using 99th percentile
-                IQR = Q3 - Q1
-
-                lower_bound = Q1 - 3 * IQR
-                upper_bound = Q3 + 3 * IQR
-
-                # Keep only non-outliers
-                self.df = self.df[
-                    (self.df[col] >= lower_bound) &
-                    (self.df[col] <= upper_bound)
-                ]
+                lower = self.df[col].quantile(0.01)
+                upper = self.df[col].quantile(0.99)
+                self.df = self.df[(self.df[col] >= lower) & (self.df[col] <= upper)]
 
         removed_rows = initial_rows - len(self.df)
         logger.info(f"Removed {removed_rows} extreme outlier rows")
 
-    def save_processed_data(self, output_path: str = None):
-        """
-        Save processed data to file
-
-        Args:
-            output_path: Path to save processed data
-        """
+    def save_processed_data(self, output_path: Optional[str] = None):
+        """Save processed data to file"""
         if output_path is None:
             output_path = self.config['data']['processed_path']
 
         output_path = Path(output_path)
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
-        # Save as parquet for better performance
         self.df.to_parquet(output_path, index=False)
         logger.info(f"Processed data saved to {output_path}")
 
-        # Also save metadata
         metadata_path = output_path.parent / f"{output_path.stem}_metadata.json"
         pd.Series(self.metadata).to_json(metadata_path)
         logger.info(f"Metadata saved to {metadata_path}")
