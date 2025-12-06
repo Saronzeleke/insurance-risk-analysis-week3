@@ -1,5 +1,4 @@
 # Core Data Science Stack
-numpy
 pandas==2.0.3
 scipy==1.11.1
 scikit-learn==1.3.0
