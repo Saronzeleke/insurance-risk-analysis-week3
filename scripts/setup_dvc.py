@@ -1,7 +1,3 @@
-#!/usr/bin/env python3
-"""
-Complete DVC Setup Script for Insurance Risk Analysis
-"""
 import subprocess
 import os
 import sys
