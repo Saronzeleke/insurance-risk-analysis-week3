@@ -15,7 +15,13 @@ stages:
       - scripts/run_eda.py
       - data/processed/cleaned_data.parquet
     outs:
-      - reports/figures/
+      - reports/figures/data_quality_summary.png
+      - reports/figures/correlation_matrix.png
+      - reports/figures/numeric_distributions.png
+      - reports/figures/categorical_distributions.png
+      - reports/figures/loss_ratio_analysis.png
+      - reports/figures/temporal_trends.png
+      - reports/figures/outlier_analysis.png
       - reports/docs/eda_summary.json
       - reports/docs/eda_report.html
   
@@ -23,7 +29,7 @@ stages:
     cmd: python scripts/generate_report.py
     deps:
       - scripts/generate_report.py
-      - reports/figures/
+      - reports/figures/data_quality_summary.png
       - reports/docs/eda_summary.json
     outs:
       - reports/final_report.pdf
@@ -32,7 +38,6 @@ stages:
 metrics:
   - reports/metrics.json
 
-# FIXED: Correct plots syntax
 plots:
   - reports/metrics.json:
       x: analysis_timestamp

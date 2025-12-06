@@ -1,4 +1,3 @@
-
 # Ignore temporary files
 *.tmp
 *.temp
@@ -21,9 +20,4 @@ __pycache__/
 .DS_Store
 Thumbs.db
 
-# Ignore large generated files (tracked separately)
-!data/raw/insurance_data.csv
-!data/processed/cleaned_data.parquet
-!reports/figures/*.png
-!reports/figures/*.html
-!reports/docs/eda_summary.json
+# Do not ignore actual data files (they are tracked by DVC)
