@@ -213,7 +213,8 @@ class DVCScript:
         success = True
         
         for file_path in files_to_track:
-            if Path(file_path).exists() or file_path.endswith('/'):
+            if file_path.endswith('/') or Path(file_path).exists():
+
                 cmd = f"dvc add {file_path}"
                 if self._run_command(cmd, f"Track {file_path} with DVC"):
                     logger.info(f"Successfully tracked: {file_path}")
