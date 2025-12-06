@@ -1,49 +1,41 @@
-# Core Data Science Stack
-pandas==2.0.3
-scipy==1.11.1
-scikit-learn==1.3.0
+numpy
+pandas
+scipy
+scikit-learn
 
-# Visualization
-matplotlib==3.7.2
-seaborn==0.12.2
-plotly==5.17.0
-bokeh==3.2.1
-yellowbrick==1.5
+matplotlib
+seaborn
+plotly
+bokeh
+yellowbrick
 
-# Jupyter
-jupyter==1.0.0
-ipykernel==6.25.0
-notebook==7.0.2
-jupyter-contrib-nbextensions==0.7.0
+jupyter
+ipykernel
+notebook
+jupyter-contrib-nbextensions
 
-# Data Version Control
-dvc==3.32.0
-dvc-s3==3.32.0
+dvc
+dvc-s3
 
-# Data Processing
-pyarrow==14.0.1
-openpyxl==3.1.2
-xlrd==2.0.1
+pyarrow
+openpyxl
+xlrd
 
-# Statistics & ML
-statsmodels==0.14.0
-lightgbm==4.1.0
-xgboost==2.0.0
+statsmodels
+lightgbm
+xgboost
 
-# Utilities
-python-dotenv==1.0.0
-pyyaml==6.0.1
-tqdm==4.66.1
-joblib==1.3.2
-pillow==10.1.0
+python-dotenv
+pyyaml
+tqdm
+joblib
+pillow
 
-# Testing
-pytest==7.4.3
-pytest-cov==4.1.0
-pytest-mock==3.12.0
+pytest
+pytest-cov
+pytest-mock
 
-# Code Quality
-black==23.9.1
-flake8==6.1.0
-isort==5.12.0
-pre-commit==3.5.0
+black
+flake8
+isort
+pre-commit
