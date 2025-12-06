@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 class InsuranceDataProcessor:
     """Process insurance data for EDA analysis"""
-    
+
     def __init__(self, config_path: str = "config/config.yaml"):
         """
         Initialize data processor with configuration
@@ -30,11 +30,11 @@ class InsuranceDataProcessor:
         """
         with open(config_path, 'r') as f:
             self.config = yaml.safe_load(f)
-        
+
         self.data_path = Path(self.config['data']['raw_path'])
         self.df = None
         self.metadata = {}
-        
+
     def load_data(self) -> pd.DataFrame:
         """
         Load and validate insurance data
@@ -43,7 +43,7 @@ class InsuranceDataProcessor:
             DataFrame: Loaded and validated data
         """
         logger.info(f"Loading data from {self.data_path}")
-        
+
         try:
             # Try different file formats
             if self.data_path.suffix == '.csv':
@@ -54,19 +54,19 @@ class InsuranceDataProcessor:
                 self.df = pd.read_excel(self.data_path)
             else:
                 raise ValueError(f"Unsupported file format: {self.data_path.suffix}")
-            
+
             logger.info(f"Data loaded successfully. Shape: {self.df.shape}")
-            
+
             # Store metadata
             self.metadata['original_shape'] = self.df.shape
             self.metadata['original_columns'] = list(self.df.columns)
-            
+
             return self.df
-            
+
         except Exception as e:
             logger.error(f"Error loading data: {e}")
             raise
-    
+
     def validate_data_structure(self) -> Dict:
         """
         Validate data structure and types
@@ -76,17 +76,17 @@ class InsuranceDataProcessor:
         """
         if self.df is None:
             raise ValueError("Data not loaded. Call load_data() first.")
-        
+
         validation_results = {
             'data_types': {},
             'missing_values': {},
             'unique_counts': {},
             'basic_stats': {}
         }
-        
+
         # Check data types
         validation_results['data_types'] = self.df.dtypes.astype(str).to_dict()
-        
+
         # Check missing values
         missing_counts = self.df.isnull().sum()
         missing_percentage = (missing_counts / len(self.df)) * 100
@@ -94,7 +94,7 @@ class InsuranceDataProcessor:
             'missing_count': missing_counts,
             'missing_percentage': missing_percentage
         }).to_dict()
-        
+
         # Check unique values for categorical columns
         categorical_cols = self.config['analysis']['categorical_columns']
         for col in categorical_cols:
@@ -103,7 +103,7 @@ class InsuranceDataProcessor:
                     'count': self.df[col].nunique(),
                     'values': self.df[col].unique()[:20].tolist()  # First 20 unique values
                 }
-        
+
         # Basic statistics for numerical columns
         numerical_cols = self.config['analysis']['numerical_columns']
         for col in numerical_cols:
@@ -117,9 +117,9 @@ class InsuranceDataProcessor:
                     'q1': float(self.df[col].quantile(0.25)),
                     'q3': float(self.df[col].quantile(0.75))
                 }
-        
+
         return validation_results
-    
+
     def preprocess_data(self) -> pd.DataFrame:
         """
         Preprocess data for analysis
@@ -128,7 +128,7 @@ class InsuranceDataProcessor:
             DataFrame: Preprocessed data
         """
         logger.info("Starting data preprocessing")
-        
+
         # Convert date columns
         if 'TransactionMonth' in self.df.columns:
             self.df['TransactionMonth'] = pd.to_datetime(
@@ -137,23 +137,23 @@ class InsuranceDataProcessor:
             self.df['TransactionYear'] = self.df['TransactionMonth'].dt.year
             self.df['TransactionMonthNum'] = self.df['TransactionMonth'].dt.month
             self.df['TransactionQuarter'] = self.df['TransactionMonth'].dt.quarter
-        
+
         # Calculate derived metrics
         self._calculate_derived_metrics()
-        
+
         # Handle missing values
         self._handle_missing_values()
-        
+
         # Clean categorical variables
         self._clean_categorical_variables()
-        
+
         # Remove extreme outliers
         self._remove_extreme_outliers()
-        
+
         logger.info(f"Data preprocessing completed. Final shape: {self.df.shape}")
-        
+
         return self.df
-    
+
     def _calculate_derived_metrics(self):
         """Calculate derived metrics for analysis"""
         # Loss Ratio
@@ -162,13 +162,13 @@ class InsuranceDataProcessor:
             self.df['TotalClaims'] / self.df['TotalPremium'],
             np.nan
         )
-        
+
         # Claim Frequency (if PolicyID available)
         if 'PolicyID' in self.df.columns:
             total_policies = self.df['PolicyID'].nunique()
             if total_policies > 0:
                 self.df['ClaimFrequency'] = len(self.df) / total_policies
-        
+
         # Premium to SumInsured Ratio
         if 'SumInsured' in self.df.columns:
             self.df['PremiumToSumInsuredRatio'] = np.where(
@@ -176,7 +176,7 @@ class InsuranceDataProcessor:
                 self.df['TotalPremium'] / self.df['SumInsured'],
                 np.nan
             )
-    
+
     def _handle_missing_values(self):
         """Handle missing values based on column type"""
         # For numerical columns, fill with median
@@ -186,71 +186,74 @@ class InsuranceDataProcessor:
                 median_val = self.df[col].median()
                 self.df[col] = self.df[col].fillna(median_val)
                 logger.info(f"Filled missing values in {col} with median: {median_val}")
-        
+
         # For categorical columns, fill with mode
         categorical_cols = self.config['analysis']['categorical_columns']
         for col in categorical_cols:
             if col in self.df.columns and self.df[col].isnull().any():
-                mode_val = self.df[col].mode()[0] if not self.df[col].mode().empty else 'Unknown'
+                if not self.df[col].mode().empty:
+                    mode_val = self.df[col].mode()[0]
+                else:
+                    mode_val = 'Unknown'
                 self.df[col] = self.df[col].fillna(mode_val)
                 logger.info(f"Filled missing values in {col} with mode: {mode_val}")
-    
+
     def _clean_categorical_variables(self):
         """Clean and standardize categorical variables"""
         categorical_cols = self.config['analysis']['categorical_columns']
-        
+
         for col in categorical_cols:
             if col in self.df.columns:
                 # Convert to string and strip whitespace
                 self.df[col] = self.df[col].astype(str).str.strip()
-                
+
                 # Standardize case
                 self.df[col] = self.df[col].str.title()
-                
+
                 # Replace empty strings with 'Unknown'
                 self.df[col] = self.df[col].replace(['', 'Nan', 'None', 'N/A'], 'Unknown')
-    
+
     def _remove_extreme_outliers(self):
         """Remove extreme outliers using IQR method"""
         numerical_cols = self.config['analysis']['numerical_columns']
-        
+
         initial_rows = len(self.df)
-        
+
         for col in numerical_cols:
             if col in self.df.columns:
                 Q1 = self.df[col].quantile(0.01)  # Using 1st percentile
                 Q3 = self.df[col].quantile(0.99)  # Using 99th percentile
                 IQR = Q3 - Q1
-                
+
                 lower_bound = Q1 - 3 * IQR
                 upper_bound = Q3 + 3 * IQR
-                
+
                 # Keep only non-outliers
                 self.df = self.df[
-                    (self.df[col] >= lower_bound) & 
+                    (self.df[col] >= lower_bound) &
                     (self.df[col] <= upper_bound)
                 ]
-        
+
         removed_rows = initial_rows - len(self.df)
         logger.info(f"Removed {removed_rows} extreme outlier rows")
-    
+
     def save_processed_data(self, output_path: str = None):
         """
         Save processed data to file
-        
+
         Args:
             output_path: Path to save processed data
         """
         if output_path is None:
             output_path = self.config['data']['processed_path']
-        
+
         output_path = Path(output_path)
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        
+
         # Save as parquet for better performance
         self.df.to_parquet(output_path, index=False)
         logger.info(f"Processed data saved to {output_path}")
-        
+
         # Also save metadata
         metadata_path = output_path.parent / f"{output_path.stem}_metadata.json"
         pd.Series(self.metadata).to_json(metadata_path)
